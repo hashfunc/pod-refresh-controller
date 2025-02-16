@@ -10,13 +10,13 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
-func New(enableLocalConfig bool) (kubernetes.Interface, error) {
+func New(enableLocalConfig bool) (*kubernetes.Clientset, error) {
 	var config *rest.Config
 
 	if enableLocalConfig {
 		homeDir, err := os.UserHomeDir()
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("getting user home directory: %w", err)
 		}
 
 		kubeconfig := path.Join(homeDir, ".kube", "config")

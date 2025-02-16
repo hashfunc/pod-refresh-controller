@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"fmt"
 	"runtime"
 	"time"
 
@@ -56,7 +55,7 @@ func NewController(kubeclient kubernetes.Interface, podName, podNamespace string
 		informers.WithNamespace(podNamespace),
 		informers.WithTweakListOptions(
 			func(options *metav1.ListOptions) {
-				options.FieldSelector = fmt.Sprintf("metadata.name=%s", config.GetConfigMapName())
+				options.FieldSelector = "metadata.name=" + config.GetConfigMapName()
 			},
 		),
 	)
@@ -88,11 +87,11 @@ func NewController(kubeclient kubernetes.Interface, podName, podNamespace string
 		numberOfWorkers: runtime.NumCPU(),
 	}
 
-	deploymentInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+	_, _ = deploymentInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 		UpdateFunc: controller.UpdateFuncDeployment,
 	})
 
-	configmapInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+	_, _ = configmapInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: controller.UpdateConfig,
 		UpdateFunc: func(_, newObj interface{}) {
 			controller.UpdateConfig(newObj)
@@ -108,20 +107,27 @@ func (controller *Controller) Run(stopCh <-chan struct{}) error {
 	controller.sharedInformerFactory.Start(stopCh)
 	controller.sharedInformerFactoryForConfigMap.Start(stopCh)
 
-	if ok := cache.WaitForCacheSync(stopCh, controller.podsSynced, controller.deploymentsSynced, controller.configmapsSynced); !ok {
-		return fmt.Errorf("failed to wait for caches to sync")
+	if ok := cache.WaitForCacheSync(
+		stopCh,
+		controller.podsSynced,
+		controller.deploymentsSynced,
+		controller.configmapsSynced,
+	); !ok {
+		klog.Fatalf("waiting for cache sync")
 	}
 
 	klog.Infof("starting workers(%d)", controller.numberOfWorkers)
-	for i := 0; i < controller.numberOfWorkers; i++ {
+
+	for range controller.numberOfWorkers {
 		go wait.Until(controller.worker.Run, time.Second, stopCh)
 	}
 
 	<-stopCh
+
 	return nil
 }
 
-func (controller *Controller) UpdateFuncDeployment(oldObj, newObj interface{}) {
+func (controller *Controller) UpdateFuncDeployment(_, newObj interface{}) {
 	deployment, ok := newObj.(*appsv1.Deployment)
 	if !ok {
 		klog.Errorf("casting to deployment: %T", newObj)
@@ -157,6 +163,7 @@ func (controller *Controller) UpdateFuncDeployment(oldObj, newObj interface{}) {
 		key, err := cache.MetaNamespaceKeyFunc(pod)
 		if err != nil {
 			klog.Errorf("cannot get key for %s: %s", pod.Name, err)
+
 			continue
 		}
 

@@ -41,6 +41,6 @@ func main() {
 			klog.Fatalf("running controller: %s", err.Error())
 		}
 	}); err != nil {
-		klog.Fatalf("running leader election: %s", err.Error())
+		klog.Fatalf("error running leader election: %s", err.Error())
 	}
 }

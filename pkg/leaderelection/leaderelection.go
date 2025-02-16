@@ -18,7 +18,12 @@ const (
 	DefaultRetryPeriod   = 2 * time.Second
 )
 
-func Run(ctx context.Context, client kubernetes.Interface, podName, podNamespace string, run func(context.Context)) error {
+func Run(
+	ctx context.Context,
+	client kubernetes.Interface,
+	podName, podNamespace string,
+	run func(context.Context),
+) error {
 	lock := &resourcelock.LeaseLock{
 		LeaseMeta: metav1.ObjectMeta{
 			Name:      "pod-refresh-controller",

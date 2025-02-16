@@ -45,6 +45,7 @@ func (worker *Worker) process() bool {
 	if err != nil {
 		worker.workqueue.AddRateLimited(task)
 		klog.Errorf("cannot reconcile pods: %s", err)
+
 		return true
 	}
 
@@ -58,19 +59,19 @@ func (worker *Worker) refreshPod(key string) error {
 
 	namespace, name, err := cache.SplitMetaNamespaceKey(key)
 	if err != nil {
-		return fmt.Errorf("splitting key: %s", err)
+		return fmt.Errorf("splitting key: %w", err)
 	}
 
-	err = worker.kubeclient.CoreV1().Pods(namespace).
-		Evict(context.Background(), &policyv1beta1.Eviction{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      name,
-				Namespace: namespace,
-			},
-		})
+	eviction := &policyv1beta1.Eviction{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+	}
 
+	err = worker.kubeclient.CoreV1().Pods(namespace).Evict(context.Background(), eviction)
 	if err != nil {
-		return fmt.Errorf("evicting pod: %s", err)
+		return fmt.Errorf("evicting pod: %w", err)
 	}
 
 	return nil

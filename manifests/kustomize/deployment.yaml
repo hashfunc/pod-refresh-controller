@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pod-refresh-controller
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: pod-refresh-controller
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: pod-refresh-controller
+    spec:
+      serviceAccountName: pod-refresh-controller
+      terminationGracePeriodSeconds: 60
+      containers:
+      - image: pod-refresh-controller:latest
+        imagePullPolicy: IfNotPresent
+        name: pod-refresh-controller
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 256Mi

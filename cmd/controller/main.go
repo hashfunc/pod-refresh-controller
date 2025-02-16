@@ -8,6 +8,7 @@ import (
 
 	"k8s.io/klog/v2"
 
+	"github.com/hashfunc/pod-refresh-controller/pkg/config"
 	pod_refresh_controller "github.com/hashfunc/pod-refresh-controller/pkg/controller"
 	"github.com/hashfunc/pod-refresh-controller/pkg/kubeclient"
 	"github.com/hashfunc/pod-refresh-controller/pkg/leaderelection"
@@ -34,7 +35,7 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
-	controller := pod_refresh_controller.NewController(client, podName, podNamespace)
+	controller := pod_refresh_controller.NewController(client, podName, podNamespace, config.DefaultResyncPeriod)
 
 	if err := leaderelection.Run(ctx, client, podName, podNamespace, func(ctx context.Context) {
 		if err := controller.Run(ctx.Done()); err != nil {

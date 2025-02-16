@@ -13,6 +13,7 @@ linters-settings:
         - "$gostd"
         - "github.com/hashfunc/pod-refresh-controller"
         - "k8s.io"
+        - "github.com/samber"
 
   gci:
     sections:

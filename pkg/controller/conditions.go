@@ -27,10 +27,11 @@ func (controller *Controller) isControllerDeployment(deploymentName string) bool
 }
 
 func (controller *Controller) isDeploymentReady(deployment *appsv1.Deployment) bool {
-	for _, condition := range (*deployment).Status.Conditions {
+	for _, condition := range deployment.Status.Conditions {
 		if condition.Type == appsv1.DeploymentAvailable && condition.Status != corev1.ConditionTrue {
 			return false
 		}
+
 		if condition.Type == appsv1.DeploymentProgressing {
 			if condition.Status != corev1.ConditionTrue {
 				return false

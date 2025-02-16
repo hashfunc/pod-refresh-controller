@@ -3,6 +3,7 @@ package controller
 import (
 	"fmt"
 	"regexp"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -42,4 +43,8 @@ func (controller *Controller) isDeploymentReady(deployment *appsv1.Deployment) b
 	}
 
 	return true
+}
+
+func (controller *Controller) isPodExpired(pod *corev1.Pod) bool {
+	return time.Since(pod.CreationTimestamp.Time) > controller.config.PodExpirationTime
 }

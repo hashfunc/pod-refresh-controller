@@ -1,0 +1,5 @@
+apiVersion: v2
+name: pod-refresh-controller
+description: A Kubernetes controller that manages pod lifecycle.
+version: 0.1.0
+appVersion: 0.1.0

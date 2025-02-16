@@ -56,7 +56,7 @@ func NewController(kubeclient kubernetes.Interface, podName, podNamespace string
 		informers.WithNamespace(podNamespace),
 		informers.WithTweakListOptions(
 			func(options *metav1.ListOptions) {
-				options.FieldSelector = fmt.Sprintf("metadata.name=%s", config.DefaultConfigMapName)
+				options.FieldSelector = fmt.Sprintf("metadata.name=%s", config.GetConfigMapName())
 			},
 		),
 	)

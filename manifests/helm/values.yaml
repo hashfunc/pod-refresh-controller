@@ -1,0 +1,18 @@
+image:
+  repository: pod-refresh-controller
+  tag: 0.1.0
+
+configMapName: null
+
+config:
+  podExpirationTime: "5m"
+
+replicas: 2
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi

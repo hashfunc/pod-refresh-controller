@@ -10,8 +10,13 @@ import (
 )
 
 func main() {
-	namespace := os.Getenv("POD_NAMESPACE")
-	if namespace == "" {
+	podName := os.Getenv("POD_NAME")
+	if podName == "" {
+		klog.Fatal("POD_NAME is not set")
+	}
+
+	podNamespace := os.Getenv("POD_NAMESPACE")
+	if podNamespace == "" {
 		klog.Fatal("POD_NAMESPACE is not set")
 	}
 
@@ -22,7 +27,7 @@ func main() {
 		klog.Fatalf("creating kubeclient: %s", err.Error())
 	}
 
-	controller := pod_refresh_controller.NewController(client, namespace)
+	controller := pod_refresh_controller.NewController(client, podName, podNamespace)
 
 	stopCh := make(chan struct{})
 	defer close(stopCh)

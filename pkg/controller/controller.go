@@ -6,6 +6,7 @@ import (
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/informers"
@@ -15,18 +16,27 @@ import (
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog/v2"
 
+	"github.com/hashfunc/pod-refresh-controller/pkg/config"
 	"github.com/hashfunc/pod-refresh-controller/pkg/worker"
+)
+
+const (
+	DefaultResyncPeriod = 2 * time.Minute
 )
 
 type Controller struct {
 	podName      string
 	podNamespace string
+	config       *config.Config
 
-	kubeclient            kubernetes.Interface
-	sharedInformerFactory informers.SharedInformerFactory
-	podLister             corelisters.PodLister
-	podsSynced            cache.InformerSynced
-	deploymentsSynced     cache.InformerSynced
+	kubeclient                        kubernetes.Interface
+	sharedInformerFactory             informers.SharedInformerFactory
+	sharedInformerFactoryForConfigMap informers.SharedInformerFactory
+
+	podLister         corelisters.PodLister
+	podsSynced        cache.InformerSynced
+	deploymentsSynced cache.InformerSynced
+	configmapsSynced  cache.InformerSynced
 
 	workqueue       worker.QueueType
 	worker          *worker.Worker
@@ -36,12 +46,24 @@ type Controller struct {
 func NewController(kubeclient kubernetes.Interface, podName, podNamespace string) *Controller {
 	sharedInformerFactory := informers.NewSharedInformerFactoryWithOptions(
 		kubeclient,
-		2*time.Minute,
+		DefaultResyncPeriod,
 		informers.WithNamespace(podNamespace),
+	)
+
+	sharedInformerFactoryForConfigMap := informers.NewSharedInformerFactoryWithOptions(
+		kubeclient,
+		DefaultResyncPeriod,
+		informers.WithNamespace(podNamespace),
+		informers.WithTweakListOptions(
+			func(options *metav1.ListOptions) {
+				options.FieldSelector = fmt.Sprintf("metadata.name=%s", config.DefaultConfigMapName)
+			},
+		),
 	)
 
 	podInformer := sharedInformerFactory.Core().V1().Pods()
 	deploymentInformer := sharedInformerFactory.Apps().V1().Deployments()
+	configmapInformer := sharedInformerFactoryForConfigMap.Core().V1().ConfigMaps()
 
 	queue := workqueue.NewTypedRateLimitingQueue(
 		workqueue.DefaultTypedControllerRateLimiter[string](),
@@ -50,12 +72,16 @@ func NewController(kubeclient kubernetes.Interface, podName, podNamespace string
 	controller := &Controller{
 		podName:      podName,
 		podNamespace: podNamespace,
+		config:       config.NewDefaultConfig(),
 
-		kubeclient:            kubeclient,
-		sharedInformerFactory: sharedInformerFactory,
-		podLister:             podInformer.Lister(),
-		podsSynced:            podInformer.Informer().HasSynced,
-		deploymentsSynced:     deploymentInformer.Informer().HasSynced,
+		kubeclient:                        kubeclient,
+		sharedInformerFactory:             sharedInformerFactory,
+		sharedInformerFactoryForConfigMap: sharedInformerFactoryForConfigMap,
+
+		podLister:         podInformer.Lister(),
+		podsSynced:        podInformer.Informer().HasSynced,
+		deploymentsSynced: deploymentInformer.Informer().HasSynced,
+		configmapsSynced:  configmapInformer.Informer().HasSynced,
 
 		workqueue:       queue,
 		worker:          worker.NewWorker(queue),
@@ -66,6 +92,13 @@ func NewController(kubeclient kubernetes.Interface, podName, podNamespace string
 		UpdateFunc: controller.UpdateFuncDeployment,
 	})
 
+	configmapInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc: controller.UpdateConfig,
+		UpdateFunc: func(_, newObj interface{}) {
+			controller.UpdateConfig(newObj)
+		},
+	})
+
 	return controller
 }
 
@@ -73,8 +106,9 @@ func (controller *Controller) Run(stopCh <-chan struct{}) error {
 	defer controller.workqueue.ShutDown()
 
 	controller.sharedInformerFactory.Start(stopCh)
+	controller.sharedInformerFactoryForConfigMap.Start(stopCh)
 
-	if ok := cache.WaitForCacheSync(stopCh, controller.podsSynced, controller.deploymentsSynced); !ok {
+	if ok := cache.WaitForCacheSync(stopCh, controller.podsSynced, controller.deploymentsSynced, controller.configmapsSynced); !ok {
 		return fmt.Errorf("failed to wait for caches to sync")
 	}
 
@@ -123,5 +157,26 @@ func (controller *Controller) UpdateFuncDeployment(oldObj, newObj interface{}) {
 		}
 
 		controller.workqueue.Add(key)
+	}
+}
+
+func (controller *Controller) UpdateConfig(obj interface{}) {
+	configmap, ok := obj.(*corev1.ConfigMap)
+	if !ok {
+		klog.Errorf("casting to configmap: %T", obj)
+		return
+	}
+
+	podExpirationTime, err := time.ParseDuration(configmap.Data["podExpirationTime"])
+	if err != nil {
+		klog.Errorf("parsing pod expiration time: %s", err)
+		return
+	}
+
+	klog.Infof("pod expiration time: %s", podExpirationTime)
+
+	if controller.config.PodExpirationTime != podExpirationTime {
+		klog.Infof("pod expiration time updated to %s", podExpirationTime)
+		controller.config.PodExpirationTime = podExpirationTime
 	}
 }

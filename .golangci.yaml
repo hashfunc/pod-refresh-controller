@@ -1,0 +1,24 @@
+linters:
+  enable-all: true
+  disable:
+  - exhaustruct
+  - nlreturn
+  - tenv
+
+linters-settings:
+  depguard:
+    rules:
+      main:
+        allow:
+        - "$gostd"
+        - "github.com/hashfunc/pod-refresh-controller"
+        - "k8s.io"
+
+  gci:
+    sections:
+    - standard
+    - default
+    - prefix(github.com/hashfunc/pod-refresh-controller)
+
+  gofumpt:
+    module-path: "github.com/hashfunc/pod-refresh-controller"

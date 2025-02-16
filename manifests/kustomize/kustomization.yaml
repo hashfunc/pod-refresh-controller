@@ -1,0 +1,12 @@
+resources:
+- ./configmap.yaml
+- ./deployment.yaml
+- ./pdb.yaml
+- ./rbac.yaml
+
+namespace: pod-refresh-controller
+
+images:
+- name: pod-refresh-controller
+  newName: pod-refresh-controller
+  newTag: latest

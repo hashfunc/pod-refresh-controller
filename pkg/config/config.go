@@ -1,6 +1,9 @@
 package config
 
-import "time"
+import (
+	"os"
+	"time"
+)
 
 const (
 	DefaultConfigMapName     = "pod-refresh-controller"
@@ -15,4 +18,14 @@ func NewDefaultConfig() *Config {
 	return &Config{
 		PodExpirationTime: DefaultPodExpirationTime,
 	}
+}
+
+func GetConfigMapName() string {
+	configMapName := os.Getenv("CONFIG_MAP_NAME")
+
+	if configMapName == "" {
+		return DefaultConfigMapName
+	}
+
+	return configMapName
 }

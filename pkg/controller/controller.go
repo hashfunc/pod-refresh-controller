@@ -19,10 +19,6 @@ import (
 	"github.com/hashfunc/pod-refresh-controller/pkg/worker"
 )
 
-const (
-	DefaultResyncPeriod = 2 * time.Minute
-)
-
 type Controller struct {
 	podName      string
 	podNamespace string
@@ -42,16 +38,20 @@ type Controller struct {
 	numberOfWorkers int
 }
 
-func NewController(kubeclient kubernetes.Interface, podName, podNamespace string) *Controller {
+func NewController(
+	kubeclient kubernetes.Interface,
+	podName, podNamespace string,
+	resyncPeriod time.Duration,
+) *Controller {
 	sharedInformerFactory := informers.NewSharedInformerFactoryWithOptions(
 		kubeclient,
-		DefaultResyncPeriod,
+		resyncPeriod,
 		informers.WithNamespace(podNamespace),
 	)
 
 	sharedInformerFactoryForConfigMap := informers.NewSharedInformerFactoryWithOptions(
 		kubeclient,
-		DefaultResyncPeriod,
+		resyncPeriod,
 		informers.WithNamespace(podNamespace),
 		informers.WithTweakListOptions(
 			func(options *metav1.ListOptions) {

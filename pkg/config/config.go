@@ -8,6 +8,7 @@ import (
 const (
 	DefaultConfigMapName     = "pod-refresh-controller"
 	DefaultPodExpirationTime = 24 * time.Hour
+	DefaultResyncPeriod      = 1 * time.Minute
 )
 
 type Config struct {

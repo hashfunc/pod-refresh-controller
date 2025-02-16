@@ -150,6 +150,10 @@ func (controller *Controller) UpdateFuncDeployment(oldObj, newObj interface{}) {
 	}
 
 	for _, pod := range pods {
+		if !controller.isPodExpired(pod) {
+			continue
+		}
+
 		key, err := cache.MetaNamespaceKeyFunc(pod)
 		if err != nil {
 			klog.Errorf("cannot get key for %s: %s", pod.Name, err)

@@ -18,6 +18,9 @@ import (
 )
 
 type Controller struct {
+	podName      string
+	podNamespace string
+
 	kubeclient            kubernetes.Interface
 	sharedInformerFactory informers.SharedInformerFactory
 	podLister             corelisters.PodLister
@@ -27,11 +30,11 @@ type Controller struct {
 	workers               []*worker.Worker
 }
 
-func NewController(kubeclient kubernetes.Interface, namespace string) *Controller {
+func NewController(kubeclient kubernetes.Interface, podName, podNamespace string) *Controller {
 	sharedInformerFactory := informers.NewSharedInformerFactoryWithOptions(
 		kubeclient,
 		2*time.Minute,
-		informers.WithNamespace(namespace),
+		informers.WithNamespace(podNamespace),
 	)
 
 	podInformer := sharedInformerFactory.Core().V1().Pods()
@@ -47,6 +50,9 @@ func NewController(kubeclient kubernetes.Interface, namespace string) *Controlle
 	}
 
 	controller := &Controller{
+		podName:      podName,
+		podNamespace: podNamespace,
+
 		kubeclient:            kubeclient,
 		sharedInformerFactory: sharedInformerFactory,
 		podLister:             podInformer.Lister(),
@@ -85,6 +91,10 @@ func (controller *Controller) UpdateFuncDeployment(oldObj, newObj interface{}) {
 	deployment, ok := newObj.(*appsv1.Deployment)
 	if !ok {
 		klog.Errorf("casting to deployment: %T", newObj)
+		return
+	}
+
+	if controller.isControllerDeployment(deployment.Name) {
 		return
 	}
 

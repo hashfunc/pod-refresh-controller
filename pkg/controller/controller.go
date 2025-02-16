@@ -2,6 +2,7 @@ package controller
 
 import (
 	"fmt"
+	"runtime"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -10,7 +11,10 @@ import (
 	"k8s.io/client-go/kubernetes"
 	corelisters "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
+	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog/v2"
+
+	"github.com/hashfunc/pod-refresh-controller/pkg/worker"
 )
 
 type Controller struct {
@@ -19,6 +23,8 @@ type Controller struct {
 	podLister             corelisters.PodLister
 	podsSynced            cache.InformerSynced
 	deploymentsSynced     cache.InformerSynced
+	workqueue             worker.QueueType
+	workers               []*worker.Worker
 }
 
 func NewController(kubeclient kubernetes.Interface, namespace string) *Controller {
@@ -31,12 +37,23 @@ func NewController(kubeclient kubernetes.Interface, namespace string) *Controlle
 	podInformer := sharedInformerFactory.Core().V1().Pods()
 	deploymentInformer := sharedInformerFactory.Apps().V1().Deployments()
 
+	queue := workqueue.NewTypedRateLimitingQueue(
+		workqueue.DefaultTypedControllerRateLimiter[*worker.EvictionTask](),
+	)
+
+	workers := make([]*worker.Worker, runtime.NumCPU())
+	for i := 0; i < runtime.NumCPU(); i++ {
+		workers[i] = worker.NewWorker(queue)
+	}
+
 	controller := &Controller{
 		kubeclient:            kubeclient,
 		sharedInformerFactory: sharedInformerFactory,
 		podLister:             podInformer.Lister(),
 		podsSynced:            podInformer.Informer().HasSynced,
 		deploymentsSynced:     deploymentInformer.Informer().HasSynced,
+		workqueue:             queue,
+		workers:               workers,
 	}
 
 	deploymentInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
@@ -46,7 +63,25 @@ func NewController(kubeclient kubernetes.Interface, namespace string) *Controlle
 	return controller
 }
 
-func (c *Controller) UpdateFuncDeployment(oldObj, newObj interface{}) {
+func (controller *Controller) Run(stopCh <-chan struct{}) error {
+	defer controller.workqueue.ShutDown()
+
+	controller.sharedInformerFactory.Start(stopCh)
+
+	if ok := cache.WaitForCacheSync(stopCh, controller.podsSynced, controller.deploymentsSynced); !ok {
+		return fmt.Errorf("failed to wait for caches to sync")
+	}
+
+	klog.Infof("starting workers(%d)", len(controller.workers))
+	for i := range controller.workers {
+		go controller.workers[i].Run()
+	}
+
+	<-stopCh
+	return nil
+}
+
+func (controller *Controller) UpdateFuncDeployment(oldObj, newObj interface{}) {
 	deployment, ok := newObj.(*appsv1.Deployment)
 	if !ok {
 		klog.Errorf("casting to deployment: %T", newObj)
@@ -59,24 +94,16 @@ func (c *Controller) UpdateFuncDeployment(oldObj, newObj interface{}) {
 		return
 	}
 
-	pods, err := c.podLister.Pods(deployment.Namespace).List(selector)
+	pods, err := controller.podLister.Pods(deployment.Namespace).List(selector)
 	if err != nil {
 		klog.Errorf("listing pods for %s: %s", deployment.Name, err)
 		return
 	}
 
-	for _, pod := range pods {
-		klog.Infof("%s created at %s", pod.Name, pod.CreationTimestamp)
-	}
-}
-
-func (controller *Controller) Run(stopCh <-chan struct{}) error {
-	controller.sharedInformerFactory.Start(stopCh)
-
-	if ok := cache.WaitForCacheSync(stopCh, controller.podsSynced, controller.deploymentsSynced); !ok {
-		return fmt.Errorf("failed to wait for caches to sync")
+	task := &worker.EvictionTask{
+		Deployment: deployment,
+		Pods:       pods,
 	}
 
-	<-stopCh
-	return nil
+	controller.workqueue.Add(task)
 }

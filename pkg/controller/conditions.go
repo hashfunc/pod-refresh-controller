@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"regexp"
 
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/klog/v2"
 )
 
@@ -21,4 +23,23 @@ func (controller *Controller) isControllerDeployment(deploymentName string) bool
 	}
 
 	return matched
+}
+
+func (_ *Controller) isDeploymentReady(deployment *appsv1.Deployment) bool {
+	for _, condition := range (*deployment).Status.Conditions {
+		if condition.Type == appsv1.DeploymentAvailable && condition.Status != corev1.ConditionTrue {
+			return false
+		}
+		if condition.Type == appsv1.DeploymentProgressing {
+			if condition.Status != corev1.ConditionTrue {
+				return false
+			}
+
+			if condition.Reason != "NewReplicaSetAvailable" {
+				return false
+			}
+		}
+	}
+
+	return true
 }

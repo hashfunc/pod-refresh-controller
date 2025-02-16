@@ -98,6 +98,11 @@ func (controller *Controller) UpdateFuncDeployment(oldObj, newObj interface{}) {
 		return
 	}
 
+	if !controller.isDeploymentReady(deployment) {
+		klog.Infof("cannot reconcile pods: %s is not ready", deployment.Name)
+		return
+	}
+
 	selector, err := metav1.LabelSelectorAsSelector(deployment.Spec.Selector)
 	if err != nil {
 		klog.Errorf("parsing selector: %s", err)

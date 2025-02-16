@@ -84,7 +84,7 @@ func NewController(kubeclient kubernetes.Interface, podName, podNamespace string
 		configmapsSynced:  configmapInformer.Informer().HasSynced,
 
 		workqueue:       queue,
-		worker:          worker.NewWorker(queue),
+		worker:          worker.NewWorker(kubeclient, queue),
 		numberOfWorkers: runtime.NumCPU(),
 	}
 

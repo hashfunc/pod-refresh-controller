@@ -30,7 +30,7 @@ type Controller struct {
 func NewController(kubeclient kubernetes.Interface, namespace string) *Controller {
 	sharedInformerFactory := informers.NewSharedInformerFactoryWithOptions(
 		kubeclient,
-		1*time.Minute,
+		2*time.Minute,
 		informers.WithNamespace(namespace),
 	)
 

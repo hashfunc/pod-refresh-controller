@@ -25,7 +25,7 @@ func (controller *Controller) isControllerDeployment(deploymentName string) bool
 	return matched
 }
 
-func (_ *Controller) isDeploymentReady(deployment *appsv1.Deployment) bool {
+func (controller *Controller) isDeploymentReady(deployment *appsv1.Deployment) bool {
 	for _, condition := range (*deployment).Status.Conditions {
 		if condition.Type == appsv1.DeploymentAvailable && condition.Status != corev1.ConditionTrue {
 			return false

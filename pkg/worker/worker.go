@@ -6,7 +6,7 @@ import (
 )
 
 type (
-	QueueType workqueue.TypedRateLimitingInterface[*EvictionTask]
+	QueueType workqueue.TypedRateLimitingInterface[string]
 )
 
 type Worker struct {
@@ -32,7 +32,7 @@ func (worker *Worker) process() bool {
 
 	defer worker.workqueue.Done(task)
 
-	err := worker.EvictionTaskHandler(task)
+	err := worker.refreshPod(task)
 	if err != nil {
 		worker.workqueue.AddRateLimited(task)
 		klog.Errorf("cannot reconcile pods: %s", err)
@@ -44,11 +44,8 @@ func (worker *Worker) process() bool {
 	return true
 }
 
-func (worker *Worker) EvictionTaskHandler(task *EvictionTask) error {
-	klog.Infof("processing eviction task: %s", task.Deployment.Name)
-	for _, pod := range task.Pods {
-		klog.Infof("target pod: %s", pod.Name)
-	}
+func (worker *Worker) refreshPod(key string) error {
+	klog.Infof("processing eviction task: %s", key)
 
 	return nil
 }

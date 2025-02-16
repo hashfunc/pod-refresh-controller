@@ -7,6 +7,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	corelisters "k8s.io/client-go/listers/core/v1"
@@ -26,8 +27,10 @@ type Controller struct {
 	podLister             corelisters.PodLister
 	podsSynced            cache.InformerSynced
 	deploymentsSynced     cache.InformerSynced
-	workqueue             worker.QueueType
-	workers               []*worker.Worker
+
+	workqueue       worker.QueueType
+	worker          *worker.Worker
+	numberOfWorkers int
 }
 
 func NewController(kubeclient kubernetes.Interface, podName, podNamespace string) *Controller {
@@ -41,13 +44,8 @@ func NewController(kubeclient kubernetes.Interface, podName, podNamespace string
 	deploymentInformer := sharedInformerFactory.Apps().V1().Deployments()
 
 	queue := workqueue.NewTypedRateLimitingQueue(
-		workqueue.DefaultTypedControllerRateLimiter[*worker.EvictionTask](),
+		workqueue.DefaultTypedControllerRateLimiter[string](),
 	)
-
-	workers := make([]*worker.Worker, runtime.NumCPU())
-	for i := 0; i < runtime.NumCPU(); i++ {
-		workers[i] = worker.NewWorker(queue)
-	}
 
 	controller := &Controller{
 		podName:      podName,
@@ -58,8 +56,10 @@ func NewController(kubeclient kubernetes.Interface, podName, podNamespace string
 		podLister:             podInformer.Lister(),
 		podsSynced:            podInformer.Informer().HasSynced,
 		deploymentsSynced:     deploymentInformer.Informer().HasSynced,
-		workqueue:             queue,
-		workers:               workers,
+
+		workqueue:       queue,
+		worker:          worker.NewWorker(queue),
+		numberOfWorkers: runtime.NumCPU(),
 	}
 
 	deploymentInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
@@ -78,9 +78,9 @@ func (controller *Controller) Run(stopCh <-chan struct{}) error {
 		return fmt.Errorf("failed to wait for caches to sync")
 	}
 
-	klog.Infof("starting workers(%d)", len(controller.workers))
-	for i := range controller.workers {
-		go controller.workers[i].Run()
+	klog.Infof("starting workers(%d)", controller.numberOfWorkers)
+	for i := 0; i < controller.numberOfWorkers; i++ {
+		go wait.Until(controller.worker.Run, time.Second, stopCh)
 	}
 
 	<-stopCh
@@ -115,10 +115,13 @@ func (controller *Controller) UpdateFuncDeployment(oldObj, newObj interface{}) {
 		return
 	}
 
-	task := &worker.EvictionTask{
-		Deployment: deployment,
-		Pods:       pods,
-	}
+	for _, pod := range pods {
+		key, err := cache.MetaNamespaceKeyFunc(pod)
+		if err != nil {
+			klog.Errorf("cannot get key for %s: %s", pod.Name, err)
+			continue
+		}
 
-	controller.workqueue.Add(task)
+		controller.workqueue.Add(key)
+	}
 }

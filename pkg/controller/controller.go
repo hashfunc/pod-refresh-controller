@@ -88,13 +88,13 @@ func NewController(
 	}
 
 	_, _ = deploymentInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		UpdateFunc: controller.UpdateFuncDeployment,
+		UpdateFunc: controller.updateFuncDeployment,
 	})
 
 	_, _ = configmapInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc: controller.UpdateConfig,
+		AddFunc: controller.updateConfig,
 		UpdateFunc: func(_, newObj interface{}) {
-			controller.UpdateConfig(newObj)
+			controller.updateConfig(newObj)
 		},
 	})
 
@@ -127,7 +127,7 @@ func (controller *Controller) Run(stopCh <-chan struct{}) error {
 	return nil
 }
 
-func (controller *Controller) UpdateFuncDeployment(_, newObj interface{}) {
+func (controller *Controller) updateFuncDeployment(_, newObj interface{}) {
 	deployment, ok := newObj.(*appsv1.Deployment)
 	if !ok {
 		klog.Errorf("casting to deployment: %T", newObj)
@@ -171,7 +171,7 @@ func (controller *Controller) UpdateFuncDeployment(_, newObj interface{}) {
 	}
 }
 
-func (controller *Controller) UpdateConfig(obj interface{}) {
+func (controller *Controller) updateConfig(obj interface{}) {
 	configmap, ok := obj.(*corev1.ConfigMap)
 	if !ok {
 		klog.Errorf("casting to configmap: %T", obj)

@@ -38,7 +38,7 @@ func TestPodRefresh(t *testing.T) {
 			return true, nil, nil
 		})
 
-	deployment := getDeploymentForTesting()
+	deployment := getDeploymentForTesting("NewReplicaSetAvailable")
 
 	lo.Must(
 		fakeClient.AppsV1().
@@ -76,7 +76,65 @@ func TestPodRefresh(t *testing.T) {
 	}
 }
 
-func getDeploymentForTesting() *appsv1.Deployment {
+func TestPodRefreshWhenDeploymentIsUpdating(t *testing.T) {
+	t.Parallel()
+
+	fakeClient := fake.NewSimpleClientset()
+
+	podEviction := make(chan string, 1)
+
+	fakeClient.PrependReactor(
+		"create",
+		"pods/eviction",
+		func(action k8stesting.Action) (bool, runtime.Object, error) {
+			eviction, ok := action.(k8stesting.CreateAction).GetObject().(*policyv1beta1.Eviction)
+			if !ok {
+				t.Fatalf("casting to eviction")
+			}
+
+			podEviction <- eviction.Name
+
+			return true, nil, nil
+		})
+
+	deployment := getDeploymentForTesting("ReplicaSetUpdated")
+
+	lo.Must(
+		fakeClient.AppsV1().
+			Deployments(deployment.Namespace).
+			Create(context.Background(), deployment, metav1.CreateOptions{}))
+
+	pod := getPodForTesting()
+
+	lo.Must(
+		fakeClient.CoreV1().
+			Pods(pod.Namespace).
+			Create(context.Background(), pod, metav1.CreateOptions{}))
+
+	controller := pod_refresh_controller.NewController(
+		fakeClient,
+		"pod-refresh-controller",
+		deployment.Namespace,
+		2*time.Second,
+	)
+
+	stopCh := make(chan struct{})
+	defer close(stopCh)
+
+	go func() {
+		lo.Must0(controller.Run(stopCh))
+	}()
+
+	select {
+	case podName := <-podEviction:
+		if podName == pod.Name {
+			t.Errorf("expected no eviction")
+		}
+	case <-time.After(10 * time.Second):
+	}
+}
+
+func getDeploymentForTesting(reason string) *appsv1.Deployment {
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "testing",
@@ -98,7 +156,7 @@ func getDeploymentForTesting() *appsv1.Deployment {
 				{
 					Type:   appsv1.DeploymentProgressing,
 					Status: corev1.ConditionTrue,
-					Reason: "NewReplicaSetAvailable",
+					Reason: reason,
 				},
 			},
 		},

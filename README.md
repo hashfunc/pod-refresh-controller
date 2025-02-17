@@ -13,21 +13,22 @@ Pod가 오랜 기간동안 유지되면 예상하지 못한 문제가 발생할 
 
 ## 구성
 
-- **pkg/config**  
+- **pkg/config**
   - Controller에서 사용하는 설정을 관리합니다.
+  - Informer 사용하여 설정이 저장된 ConfigMap을 관리합니다.
 
 - **pkg/controller**
   - Pod Refresh Controller의 핵심 기능이 구현되어 있습니다.
   - 제거 대상이 되는 Pod를 조회하여 workqueue에 추가합니다.
-  - Informer 사용하여 Deployment, Pod, ConfigMap을 관리합니다.
+  - Informer 사용하여 Deployment, Pod 관리합니다.
 
-- **pkg/kubeclient**  
+- **pkg/kubeclient**
   - Kubernetes API Client와 관련 설정을 관리합니다.
 
 - **pkg/worker**
   - workqueue에서 대상이된 Pod를 가져와서 제거 작업을 수행합니다.
 
-- **pkg/leaderelection**  
+- **pkg/leaderelection**
   - HA 구성을 위해 Kubernetes의 Leader Election 기능을 구현합니다.
 
 

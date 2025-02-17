@@ -35,9 +35,19 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
-	controller := pod_refresh_controller.NewController(client, podName, podNamespace, config.DefaultResyncPeriod)
+	configManager := config.NewManager(client, podNamespace)
+
+	controller := pod_refresh_controller.NewController(
+		client,
+		podName,
+		podNamespace,
+		configManager.Config(),
+		config.DefaultResyncPeriod,
+	)
 
 	if err := leaderelection.Run(ctx, client, podName, podNamespace, func(ctx context.Context) {
+		configManager.Start(ctx.Done())
+
 		if err := controller.Run(ctx.Done()); err != nil {
 			klog.Fatalf("running controller: %s", err.Error())
 		}

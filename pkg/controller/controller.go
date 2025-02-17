@@ -5,7 +5,6 @@ import (
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/informers"
@@ -24,14 +23,12 @@ type Controller struct {
 	podNamespace string
 	config       *config.Config
 
-	kubeclient                        kubernetes.Interface
-	sharedInformerFactory             informers.SharedInformerFactory
-	sharedInformerFactoryForConfigMap informers.SharedInformerFactory
+	kubeclient            kubernetes.Interface
+	sharedInformerFactory informers.SharedInformerFactory
 
 	podLister         corelisters.PodLister
 	podsSynced        cache.InformerSynced
 	deploymentsSynced cache.InformerSynced
-	configmapsSynced  cache.InformerSynced
 
 	workqueue       worker.QueueType
 	worker          *worker.Worker
@@ -41,6 +38,7 @@ type Controller struct {
 func NewController(
 	kubeclient kubernetes.Interface,
 	podName, podNamespace string,
+	config *config.Config,
 	resyncPeriod time.Duration,
 ) *Controller {
 	sharedInformerFactory := informers.NewSharedInformerFactoryWithOptions(
@@ -49,20 +47,8 @@ func NewController(
 		informers.WithNamespace(podNamespace),
 	)
 
-	sharedInformerFactoryForConfigMap := informers.NewSharedInformerFactoryWithOptions(
-		kubeclient,
-		resyncPeriod,
-		informers.WithNamespace(podNamespace),
-		informers.WithTweakListOptions(
-			func(options *metav1.ListOptions) {
-				options.FieldSelector = "metadata.name=" + config.GetConfigMapName()
-			},
-		),
-	)
-
 	podInformer := sharedInformerFactory.Core().V1().Pods()
 	deploymentInformer := sharedInformerFactory.Apps().V1().Deployments()
-	configmapInformer := sharedInformerFactoryForConfigMap.Core().V1().ConfigMaps()
 
 	queue := workqueue.NewTypedRateLimitingQueue(
 		workqueue.DefaultTypedControllerRateLimiter[string](),
@@ -71,16 +57,14 @@ func NewController(
 	controller := &Controller{
 		podName:      podName,
 		podNamespace: podNamespace,
-		config:       config.NewDefaultConfig(),
+		config:       config,
 
-		kubeclient:                        kubeclient,
-		sharedInformerFactory:             sharedInformerFactory,
-		sharedInformerFactoryForConfigMap: sharedInformerFactoryForConfigMap,
+		kubeclient:            kubeclient,
+		sharedInformerFactory: sharedInformerFactory,
 
 		podLister:         podInformer.Lister(),
 		podsSynced:        podInformer.Informer().HasSynced,
 		deploymentsSynced: deploymentInformer.Informer().HasSynced,
-		configmapsSynced:  configmapInformer.Informer().HasSynced,
 
 		workqueue:       queue,
 		worker:          worker.NewWorker(kubeclient, queue),
@@ -91,13 +75,6 @@ func NewController(
 		UpdateFunc: controller.updateFuncDeployment,
 	})
 
-	_, _ = configmapInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc: controller.updateConfig,
-		UpdateFunc: func(_, newObj interface{}) {
-			controller.updateConfig(newObj)
-		},
-	})
-
 	return controller
 }
 
@@ -105,13 +82,11 @@ func (controller *Controller) Run(stopCh <-chan struct{}) error {
 	defer controller.workqueue.ShutDown()
 
 	controller.sharedInformerFactory.Start(stopCh)
-	controller.sharedInformerFactoryForConfigMap.Start(stopCh)
 
 	if ok := cache.WaitForCacheSync(
 		stopCh,
 		controller.podsSynced,
 		controller.deploymentsSynced,
-		controller.configmapsSynced,
 	); !ok {
 		klog.Fatalf("waiting for cache sync")
 	}
@@ -168,26 +143,5 @@ func (controller *Controller) updateFuncDeployment(_, newObj interface{}) {
 		}
 
 		controller.workqueue.Add(key)
-	}
-}
-
-func (controller *Controller) updateConfig(obj interface{}) {
-	configmap, ok := obj.(*corev1.ConfigMap)
-	if !ok {
-		klog.Errorf("casting to configmap: %T", obj)
-		return
-	}
-
-	podExpirationTime, err := time.ParseDuration(configmap.Data["podExpirationTime"])
-	if err != nil {
-		klog.Errorf("parsing pod expiration time: %s", err)
-		return
-	}
-
-	klog.Infof("pod expiration time: %s", podExpirationTime)
-
-	if controller.config.PodExpirationTime != podExpirationTime {
-		klog.Infof("pod expiration time updated to %s", podExpirationTime)
-		controller.config.PodExpirationTime = podExpirationTime
 	}
 }

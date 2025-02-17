@@ -14,6 +14,7 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 	k8stesting "k8s.io/client-go/testing"
 
+	"github.com/hashfunc/pod-refresh-controller/pkg/config"
 	pod_refresh_controller "github.com/hashfunc/pod-refresh-controller/pkg/controller"
 )
 
@@ -56,6 +57,7 @@ func TestPodRefresh(t *testing.T) {
 		fakeClient,
 		"pod-refresh-controller",
 		deployment.Namespace,
+		config.NewDefaultConfig(),
 		2*time.Second,
 	)
 
@@ -115,6 +117,7 @@ func TestPodRefreshWhenDeploymentIsUpdating(t *testing.T) {
 		fakeClient,
 		"pod-refresh-controller",
 		deployment.Namespace,
+		config.NewDefaultConfig(),
 		2*time.Second,
 	)
 

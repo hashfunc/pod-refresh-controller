@@ -5,7 +5,7 @@ image:
 configMapName: null
 
 config:
-  podExpirationTime: "5m"
+  podExpirationTime: "24h"
 
 replicas: 2
 

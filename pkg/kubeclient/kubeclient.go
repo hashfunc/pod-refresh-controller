@@ -1,43 +1,34 @@
 package kubeclient
 
 import (
-	"fmt"
 	"os"
 	"path"
 
+	"github.com/samber/lo"
+	"github.com/samber/mo"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 )
 
-func New(enableLocalConfig bool) (*kubernetes.Clientset, error) {
-	var config *rest.Config
+func New(enableLocalConfig bool) mo.Result[*kubernetes.Clientset] {
+	return mo.Do(func() *kubernetes.Clientset {
+		config := lo.TernaryF(enableLocalConfig, fromLocalConfig, inClusterConfig).MustGet()
 
-	if enableLocalConfig {
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			return nil, fmt.Errorf("getting user home directory: %w", err)
-		}
+		return lo.Must(kubernetes.NewForConfig(config))
+	})
+}
+
+func fromLocalConfig() mo.Result[*rest.Config] {
+	return mo.Do(func() *rest.Config {
+		homeDir := lo.Must(os.UserHomeDir())
 
 		kubeconfig := path.Join(homeDir, ".kube", "config")
 
-		config, err = clientcmd.BuildConfigFromFlags("", kubeconfig)
-		if err != nil {
-			return nil, fmt.Errorf("building from local config: %w", err)
-		}
-	} else {
-		var err error
+		return lo.Must(clientcmd.BuildConfigFromFlags("", kubeconfig))
+	})
+}
 
-		config, err = rest.InClusterConfig()
-		if err != nil {
-			return nil, fmt.Errorf("building in-cluster config: %w", err)
-		}
-	}
-
-	client, err := kubernetes.NewForConfig(config)
-	if err != nil {
-		return nil, fmt.Errorf("creating client: %w", err)
-	}
-
-	return client, nil
+func inClusterConfig() mo.Result[*rest.Config] {
+	return mo.TupleToResult(rest.InClusterConfig())
 }

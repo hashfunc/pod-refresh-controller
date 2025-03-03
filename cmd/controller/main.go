@@ -21,10 +21,7 @@ func main() {
 
 	enableLocalConfig := common.GetEnv("ENABLE_LOCAL_CONFIG").IsPresent()
 
-	client, err := kubeclient.New(enableLocalConfig)
-	if err != nil {
-		klog.Fatalf("creating kubeclient: %s", err.Error())
-	}
+	client := kubeclient.New(enableLocalConfig).MustGet()
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()

@@ -4,6 +4,7 @@ go 1.23.6
 
 require (
 	github.com/samber/lo v1.49.1
+	github.com/samber/mo v1.13.0
 	k8s.io/api v0.32.2
 	k8s.io/apimachinery v0.32.2
 	k8s.io/client-go v0.32.2

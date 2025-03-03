@@ -8,6 +8,7 @@ import (
 
 	"k8s.io/klog/v2"
 
+	"github.com/hashfunc/pod-refresh-controller/pkg/common"
 	"github.com/hashfunc/pod-refresh-controller/pkg/config"
 	pod_refresh_controller "github.com/hashfunc/pod-refresh-controller/pkg/controller"
 	"github.com/hashfunc/pod-refresh-controller/pkg/kubeclient"
@@ -15,17 +16,10 @@ import (
 )
 
 func main() {
-	podName := os.Getenv("POD_NAME")
-	if podName == "" {
-		klog.Fatal("POD_NAME is not set")
-	}
+	podName := common.GetEnv("POD_NAME").MustGet()
+	podNamespace := common.GetEnv("POD_NAMESPACE").MustGet()
 
-	podNamespace := os.Getenv("POD_NAMESPACE")
-	if podNamespace == "" {
-		klog.Fatal("POD_NAMESPACE is not set")
-	}
-
-	_, enableLocalConfig := os.LookupEnv("ENABLE_LOCAL_CONFIG")
+	enableLocalConfig := common.GetEnv("ENABLE_LOCAL_CONFIG").IsPresent()
 
 	client, err := kubeclient.New(enableLocalConfig)
 	if err != nil {
